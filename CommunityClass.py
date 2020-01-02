@@ -359,7 +359,7 @@ class Community:
         return dataresult
     
     def updateViews(self, filename):
-        url = 'https://api.jivesoftware.com/analytics/v2/export/activity/lastweek?'
+        url = 'https://api.jivesoftware.com/analytics/v2/export/activity/lastmonth?'
         filters = 'filter=action(View)'
         fields = '&fields=seqId,timestamp,actionObjectId,actionObjectType,activity.actor.username,activity.actionObject.objectType'
         request_size = '&count=100000'
@@ -405,17 +405,19 @@ class Community:
                 condition = False
     
         dataresult = pd.concat(datafile, axis=0)
+        dataresult['dataIndex'] = dataresult['viewIndex'].astype(str) + dataresult['objectId'].astype(str)
         
         try:
-            olddata = pd.DataFrame.from_csv(filename)
+            olddata = pd.DataFrame.from_csv(filename, encoding = 'ISO-8859-1')
+            olddata['dataIndex'] = olddata['viewIndex'].astype(str) + olddata['objectId'].astype(str)
         except FileNotFoundError:
             print('That file doesnt exist. Script Exiting')
             
         #set indexes in both files for upserting purposes
-        olddata.set_index('viewIndex', inplace = True)
-        dataresult.set_index('viewIndex', inplace = True)
+        olddata.set_index('dataIndex', inplace = True)
+        dataresult.set_index('dataIndex', inplace = True)
         
         updateddata = pd.concat([olddata, dataresult[~dataresult.index.isin(olddata.index)]])
         updateddata.to_csv(filename)   
         
-        return dataresult
+        return updateddata
