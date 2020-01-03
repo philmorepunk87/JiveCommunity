@@ -228,11 +228,6 @@ class Community:
                         'containerId': [data['list'][dataelement]['containerId']],
                         'containerType': [data['list'][dataelement]['containerType']],
                         'timestamp': [time.strftime('%m/%d/%Y %H:%M:%S',  time.gmtime(data['list'][dataelement]['timestamp'] / 1000.))],
-                        #'reply': [data['list'][dataelement]['activity']['actionObject']['extras']['isRootReply']],
-                        #'threadId': [data['list'][dataelement]['activity']['actionObject']['extras']['forumThreadId']],
-                        #'messageParentId': [data['list'][dataelement]['activity']['actionObject']['extras']['messageParentId']],
-                        #'subject': [data['list'][dataelement]['activity']['actionObject']['subject']],
-                        #'username': [data['list'][dataelement]['activity']['actionObject']['author']['username']],
                         'containerName': [data['list'][dataelement]['activity']['destination']['name']]
                         }
                 newdf = pd.DataFrame(data=newd)
@@ -359,7 +354,7 @@ class Community:
         return dataresult
     
     def updateViews(self, filename):
-        url = 'https://api.jivesoftware.com/analytics/v2/export/activity/lastmonth?'
+        url = 'https://api.jivesoftware.com/analytics/v2/export/activity/lastweek?'
         filters = 'filter=action(View)'
         fields = '&fields=seqId,timestamp,actionObjectId,actionObjectType,activity.actor.username,activity.actionObject.objectType'
         request_size = '&count=100000'
@@ -405,11 +400,11 @@ class Community:
                 condition = False
     
         dataresult = pd.concat(datafile, axis=0)
-        dataresult['dataIndex'] = dataresult['viewIndex'].astype(str) + dataresult['objectId'].astype(str)
+        dataresult['dataIndex'] = dataresult['viewIndex'].astype(str) + dataresult['objectId'].astype(str) + dataresult['timestamp'].astype(str) + dataresult['objectTypeCode'].astype(str)
         
         try:
             olddata = pd.DataFrame.from_csv(filename, encoding = 'ISO-8859-1')
-            olddata['dataIndex'] = olddata['viewIndex'].astype(str) + olddata['objectId'].astype(str)
+            olddata['dataIndex'] = olddata['viewIndex'].astype(str) + olddata['objectId'].astype(str) + olddata['timestamp'].astype(str) + olddata['objectTypeCode'].astype(str)
         except FileNotFoundError:
             print('That file doesnt exist. Script Exiting')
             
@@ -418,6 +413,117 @@ class Community:
         dataresult.set_index('dataIndex', inplace = True)
         
         updateddata = pd.concat([olddata, dataresult[~dataresult.index.isin(olddata.index)]])
+        updateddata['type'] = 'View'
         updateddata.to_csv(filename)   
         
         return updateddata
+    
+    def getLikes(self):
+        url = 'https://api.jivesoftware.com/analytics/v2/export/activity?'
+        filters = 'filter=action(Like,Unlike)'
+        fields = '&fields=name,activity.actionObject.extras.acclaimId,timestamp,actionObjectId,actionObjectType,activity.actor.username,activity.actionObject.objectType'
+        request_size = '&count=100000'
+        next_url = url + filters + fields + request_size
+        total_pages = ""
+        current_page = ""
+        refresh_time = 0
+        key = ""
+        
+        datafile = []
+        condition = True
+        while(condition):
+            refresh_time, key, r = self.callAPI(refresh_time, key, next_url)
+            if r.status_code == 200:
+                data = json.loads(r.text)
+            else:
+                print('Bad status returned from API.  HTTP', r.status_code)
+                break
+            
+            for dataelement in range(len(data['list'])):
+                try:
+                    newd = {'viewIndex': [data['list'][dataelement]['activity']['actionObject']['extras']['acclaimId']],
+                            'objectId': [data['list'][dataelement]['actionObjectId']],
+                            'objectTypeCode': [data['list'][dataelement]['actionObjectType']],
+                            'objectTypeDescription': [data['list'][dataelement]['activity']['actionObject']['objectType']],
+                            'timestamp': [time.strftime('%m/%d/%Y %H:%M:%S',  time.gmtime(data['list'][dataelement]['timestamp'] / 1000.))],
+                            'username': [data['list'][dataelement]['activity']['actor']['username']],
+                            'actionType': [data['list'][dataelement]['name']]
+                            }
+                    newdf = pd.DataFrame(data=newd)
+                    datafile.append(newdf)
+                except:
+                    pass
+
+            current_page = data['paging']['currentPage']
+            total_pages = data['paging']['totalPages']
+            
+            if (total_pages != current_page):
+                next_url = data['paging']['next']
+                
+            print("Wrote page ", current_page, " of ", total_pages, " at ", time.strftime("%H:%M:%S, %Y/%m/%d", time.localtime(time.time())))
+    
+            if (total_pages == current_page) or (int(total_pages) == 0):
+                condition = False
+    
+        dataresult = pd.concat(datafile, axis=0)
+        dataresult['count'] = dataresult['actionType'].apply(lambda x: np.where(x[0:13] == 'ACTIVITY_LIKE', 1, -1))
+        dataresult['type'] = 'Like'
+        
+        dataresult.drop(labels = 'actionType', inplace = True, axis = 1)
+        
+        return dataresult
+    
+    def getBookmarks(self):
+        url = 'https://api.jivesoftware.com/analytics/v2/export/activity?'
+        filters = 'filter=action(Bookmark,Unbookmark)'
+        fields = '&fields=name,activity.actionObject.extras.bookmarkAuthors,timestamp,actionObjectId,actionObjectType,activity.actor.username,activity.actionObject.objectType'
+        request_size = '&count=100000'
+        next_url = url + filters + fields + request_size
+        total_pages = ""
+        current_page = ""
+        refresh_time = 0
+        key = ""
+        
+        datafile = []
+        condition = True
+        while(condition):
+            refresh_time, key, r = self.callAPI(refresh_time, key, next_url)
+            if r.status_code == 200:
+                data = json.loads(r.text)
+            else:
+                print('Bad status returned from API.  HTTP', r.status_code)
+                break
+            
+            for dataelement in range(len(data['list'])):
+                try:
+                    newd = {'viewIndex': [data['list'][dataelement]['activity']['actionObject']['extras']['bookmarkAuthors']],
+                            'objectId': [data['list'][dataelement]['actionObjectId']],
+                            'objectTypeCode': [data['list'][dataelement]['actionObjectType']],
+                            'objectTypeDescription': [data['list'][dataelement]['activity']['actionObject']['objectType']],
+                            'timestamp': [time.strftime('%m/%d/%Y %H:%M:%S',  time.gmtime(data['list'][dataelement]['timestamp'] / 1000.))],
+                            'username': [data['list'][dataelement]['activity']['actor']['username']],
+                            'actionType': [data['list'][dataelement]['name']]
+                            }
+                    newdf = pd.DataFrame(data=newd)
+                    datafile.append(newdf)
+                except:
+                    pass
+
+            current_page = data['paging']['currentPage']
+            total_pages = data['paging']['totalPages']
+            
+            if (total_pages != current_page):
+                next_url = data['paging']['next']
+                
+            print("Wrote page ", current_page, " of ", total_pages, " at ", time.strftime("%H:%M:%S, %Y/%m/%d", time.localtime(time.time())))
+    
+            if (total_pages == current_page) or (int(total_pages) == 0):
+                condition = False
+    
+        dataresult = pd.concat(datafile, axis=0)
+        dataresult['count'] = dataresult['actionType'].apply(lambda x: np.where(x[0:17] == 'ACTIVITY_BOOKMARK', 1, -1))
+        dataresult['type'] = 'Bookmark'
+        
+        dataresult.drop(labels = 'actionType', inplace = True, axis = 1)
+        
+        return dataresult
